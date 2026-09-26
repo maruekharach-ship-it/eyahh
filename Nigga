@@ -1,0 +1,409 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Configuration Table
+local Config = {
+    Aimbot = {
+        Enabled = false,
+        TargetPart = "Head", -- "Head", "HumanoidRootPart", "Legs"
+        TargetPlayers = true,
+        TargetNPCs = false,
+        TeamCheck = false,
+        WallCheck = false,
+        FOVSize = 100,
+        FOVRainbow = false,
+        FollowMouse = true -- true = ตามนิ้ว/เมาส์, false = อยู่กลางจอ
+    },
+    Movement = {
+        TPWalk = false,
+        TPWalkSpeed = 2,
+        InfJump = false,
+        CustomJump = false,
+        JumpPower = 50,
+        Noclip = false
+    },
+    ESP = {
+        Enabled = false,
+        Rainbow = false,
+        Type = "Box", -- "Box" หรือ "Highlight" (เห็นทั้งตัว)
+        ShowNames = true
+    }
+}
+
+-- Drawing Utility (FOV Circle)
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 64
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Visible = false
+
+-- GUI Creation
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CustomHubGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = (gethui and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
+
+-- Toggle Button (เปิด/ปิด GUI)
+local ToggleMenuBtn = Instance.new("TextButton", ScreenGui)
+ToggleMenuBtn.Size = UDim2.new(0, 80, 0, 35)
+ToggleMenuBtn.Position = UDim2.new(0.02, 0, 0.2, 0)
+ToggleMenuBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ToggleMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleMenuBtn.Text = "UI: OPEN"
+ToggleMenuBtn.Font = Enum.Font.SourceSansBold
+ToggleMenuBtn.TextSize = 14
+Instance.new("UICorner", ToggleMenuBtn).CornerRadius = UDim.new(0, 6)
+
+-- Main Frame (ลากย้ายได้)
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 480, 0, 340)
+MainFrame.Position = UDim2.new(0.3, 0, 0.25, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
+MainFrame.Active = true
+MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+
+-- Header
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+Title.Text = "  MULTI-FUNCTION HUB"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 16
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
+
+-- Tab Sidebar
+local Sidebar = Instance.new("Frame", MainFrame)
+Sidebar.Size = UDim2.new(0, 110, 1, -35)
+Sidebar.Position = UDim2.new(0, 0, 0, 35)
+Sidebar.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
+
+local SidebarLayout = Instance.new("UIListLayout", Sidebar)
+SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SidebarLayout.Padding = UDim.new(0, 5)
+
+-- Content Area
+local ContentContainer = Instance.new("Frame", MainFrame)
+ContentContainer.Size = UDim2.new(1, -120, 1, -45)
+ContentContainer.Position = UDim2.new(0, 115, 0, 40)
+ContentContainer.BackgroundTransparency = 1
+
+local function CreateTabContent()
+    local Frame = Instance.new("ScrollingFrame", ContentContainer)
+    Frame.Size = UDim2.new(1, 0, 1, 0)
+    Frame.BackgroundTransparency = 1
+    Frame.ScrollBarThickness = 4
+    Frame.Visible = false
+    
+    local Layout = Instance.new("UIListLayout", Frame)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    Layout.Padding = UDim.new(0, 6)
+    return Frame
+end
+
+local Tabs = {
+    Aimbot = CreateTabContent(),
+    Movement = CreateTabContent(),
+    ESP = CreateTabContent()
+}
+Tabs.Aimbot.Visible = true
+
+-- Helper UI Functions
+local function CreateTabButton(name, targetTab)
+    local Btn = Instance.new("TextButton", Sidebar)
+    Btn.Size = UDim2.new(1, -10, 0, 30)
+    Btn.Position = UDim2.new(0, 5, 0, 0)
+    Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    Btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    Btn.Text = name
+    Btn.Font = Enum.Font.SourceSans
+    Btn.TextSize = 14
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
+
+    Btn.MouseButton1Click:Connect(function()
+        for _, tab in pairs(Tabs) do tab.Visible = false end
+        targetTab.Visible = true
+    end)
+end
+
+CreateTabButton("Aimbot", Tabs.Aimbot)
+CreateTabButton("Movement", Tabs.Movement)
+CreateTabButton("ESP", Tabs.ESP)
+
+local function CreateToggle(parent, text, defaultState, callback)
+    local Btn = Instance.new("TextButton", parent)
+    Btn.Size = UDim2.new(1, -10, 0, 30)
+    Btn.Font = Enum.Font.SourceSansBold
+    Btn.TextSize = 14
+    Btn.Text = text .. " : " .. (defaultState and "ON" or "OFF")
+    Btn.BackgroundColor3 = defaultState and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+    Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 4)
+
+    local state = defaultState
+    Btn.MouseButton1Click:Connect(function()
+        state = not state
+        Btn.Text = text .. " : " .. (state and "ON" or "OFF")
+        Btn.BackgroundColor3 = state and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 50, 50)
+        callback(state)
+    end)
+    return Btn
+end
+
+local function CreateInput(parent, placeholder, defaultVal, callback)
+    local Box = Instance.new("TextBox", parent)
+    Box.Size = UDim2.new(1, -10, 0, 30)
+    Box.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    Box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Box.PlaceholderText = placeholder
+    Box.Text = tostring(defaultVal)
+    Box.Font = Enum.Font.SourceSans
+    Box.TextSize = 14
+    Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
+
+    Box.FocusLost:Connect(function()
+        local num = tonumber(Box.Text)
+        if num then callback(num) end
+    end)
+end
+
+-- ==================== AIMBOT TAB ====================
+CreateToggle(Tabs.Aimbot, "Aimbot", Config.Aimbot.Enabled, function(v) Config.Aimbot.Enabled = v end)
+CreateInput(Tabs.Aimbot, "ขนาดวง FOV (ตัวเลข)", Config.Aimbot.FOVSize, function(v) Config.Aimbot.FOVSize = v end)
+
+local PartBtn
+PartBtn = CreateToggle(Tabs.Aimbot, "จุดล็อค: " .. Config.Aimbot.TargetPart, true, function()
+    if Config.Aimbot.TargetPart == "Head" then
+        Config.Aimbot.TargetPart = "HumanoidRootPart"
+    elseif Config.Aimbot.TargetPart == "HumanoidRootPart" then
+        Config.Aimbot.TargetPart = "LeftLeg"
+    else
+        Config.Aimbot.TargetPart = "Head"
+    end
+    PartBtn.Text = "จุดล็อค: " .. Config.Aimbot.TargetPart
+end)
+
+CreateToggle(Tabs.Aimbot, "ล็อคผู้เล่น (Players)", Config.Aimbot.TargetPlayers, function(v) Config.Aimbot.TargetPlayers = v end)
+CreateToggle(Tabs.Aimbot, "ล็อค NPC", Config.Aimbot.TargetNPCs, function(v) Config.Aimbot.TargetNPCs = v end)
+CreateToggle(Tabs.Aimbot, "Team Check", Config.Aimbot.TeamCheck, function(v) Config.Aimbot.TeamCheck = v end)
+CreateToggle(Tabs.Aimbot, "Wall Check", Config.Aimbot.WallCheck, function(v) Config.Aimbot.WallCheck = v end)
+CreateToggle(Tabs.Aimbot, "วงสีรุ้ง (FOV Rainbow)", Config.Aimbot.FOVRainbow, function(v) Config.Aimbot.FOVRainbow = v end)
+CreateToggle(Tabs.Aimbot, "วงตามนิ้ว/เมาส์ (ปิด=อยู่กลางจอ)", Config.Aimbot.FollowMouse, function(v) Config.Aimbot.FollowMouse = v end)
+
+-- ==================== MOVEMENT TAB ====================
+CreateToggle(Tabs.Movement, "TP Walk", Config.Movement.TPWalk, function(v) Config.Movement.TPWalk = v end)
+CreateInput(Tabs.Movement, "ความเร็ว TPWalk (ใส่เล็กน้อยก็เร็ว)", Config.Movement.TPWalkSpeed, function(v) Config.Movement.TPWalkSpeed = v end)
+CreateToggle(Tabs.Movement, "กระโดดไม่จำกัด (Inf Jump)", Config.Movement.InfJump, function(v) Config.Movement.InfJump = v end)
+CreateToggle(Tabs.Movement, "เปิดใช้งาน Jump Power", Config.Movement.CustomJump, function(v) Config.Movement.CustomJump = v end)
+CreateInput(Tabs.Movement, "ระดับความสูงกระโดด (JumpPower)", Config.Movement.JumpPower, function(v) Config.Movement.JumpPower = v end)
+CreateToggle(Tabs.Movement, "ทะลุกำแพง (Noclip)", Config.Movement.Noclip, function(v) Config.Movement.Noclip = v end)
+
+-- ==================== ESP TAB ====================
+CreateToggle(Tabs.ESP, "เปิดใช้งาน ESP", Config.ESP.Enabled, function(v) Config.ESP.Enabled = v end)
+CreateToggle(Tabs.ESP, "ESP สีรุ้ง (ปิด=สีแดง)", Config.ESP.Rainbow, function(v) Config.ESP.Rainbow = v end)
+
+local ESPTypeBtn
+ESPTypeBtn = CreateToggle(Tabs.ESP, "รูปแบบ: " .. Config.ESP.Type, true, function()
+    Config.ESP.Type = (Config.ESP.Type == "Box") and "Highlight" or "Box"
+    ESPTypeBtn.Text = "รูปแบบ: " .. Config.ESP.Type
+end)
+
+CreateToggle(Tabs.ESP, "แสดงชื่อผู้เล่น", Config.ESP.ShowNames, function(v) Config.ESP.ShowNames = v end)
+
+-- Menu Toggle Logic
+ToggleMenuBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+    ToggleMenuBtn.Text = MainFrame.Visible and "UI: OPEN" or "UI: CLOSED"
+    ToggleMenuBtn.BackgroundColor3 = MainFrame.Visible and Color3.fromRGB(35, 35, 35) or Color3.fromRGB(150, 40, 40)
+end)
+
+-- ==================== CORE LOGIC IMPLEMENTATION ====================
+
+-- Rainbow Generator
+local function GetRainbowColor()
+    return Color3.fromHSV(tick() % 4 / 4, 1, 1)
+end
+
+-- Wallcheck Raycast
+local function IsVisible(targetPart)
+    if not Config.Aimbot.WallCheck then return true end
+    local origin = Camera.CFrame.Position
+    local ray = Ray.new(origin, (targetPart.Position - origin).Unit * 1000)
+    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character})
+    return hit and hit:IsDescendantOf(targetPart.Parent)
+end
+
+-- Get Aimbot Target
+local function GetClosestTarget()
+    local closest, maxDist = nil, Config.Aimbot.FOVSize
+    local center = Config.Aimbot.FollowMouse and Vector2.new(Mouse.X, Mouse.Y) or Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+    local candidates = {}
+    if Config.Aimbot.TargetPlayers then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                if not Config.Aimbot.TeamCheck or p.Team ~= LocalPlayer.Team then
+                    table.insert(candidates, p.Character)
+                end
+            end
+        end
+    end
+
+    if Config.Aimbot.TargetNPCs then
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") and not Players:GetPlayerFromCharacter(obj) then
+                if obj.Humanoid.Health > 0 then
+                    table.insert(candidates, obj)
+                end
+            end
+        end
+    end
+
+    for _, char in pairs(candidates) do
+        local part = char:FindFirstChild(Config.Aimbot.TargetPart) or char:FindFirstChild("HumanoidRootPart")
+        if part and IsVisible(part) then
+            local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                if dist < maxDist then
+                    maxDist = dist
+                    closest = part
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Infinite Jump Listener
+UserInputService.JumpRequest:Connect(function()
+    if Config.Movement.InfJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+
+-- Main Loop (RenderStepped)
+RunService.RenderStepped:Connect(function()
+    -- FOV Circle Update
+    FOVCircle.Visible = Config.Aimbot.Enabled
+    FOVCircle.Radius = Config.Aimbot.FOVSize
+    FOVCircle.Color = Config.Aimbot.FOVRainbow and GetRainbowColor() or Color3.fromRGB(255, 255, 255)
+    
+    if Config.Aimbot.FollowMouse then
+        FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 36) -- Offset สำหรับ top bar
+    else
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end
+
+    -- Aimbot Lock Execution
+    if Config.Aimbot.Enabled then
+        local target = GetClosestTarget()
+        if target then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+        end
+    end
+
+    -- TP Walk Logic
+    if Config.Movement.TPWalk and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum and hum.MoveDirection.Magnitude > 0 then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame + (hum.MoveDirection * (Config.Movement.TPWalkSpeed / 5))
+        end
+    end
+
+    -- JumpPower Logic
+    if Config.Movement.CustomJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        hum.UseJumpPower = true
+        hum.JumpPower = Config.Movement.JumpPower
+    end
+
+    -- Noclip Logic
+    if Config.Movement.Noclip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- ESP System Loop
+task.spawn(function()
+    while task.wait(0.5) do
+        if Config.ESP.Enabled then
+            local currentThemeColor = Config.ESP.Rainbow and GetRainbowColor() or Color3.fromRGB(255, 0, 0)
+            
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local char = p.Character
+                    
+                    -- Remove Old Highlights/Boxes
+                    local oldHL = char:FindFirstChild("ESPHighlight")
+                    local oldBB = char:FindFirstChild("ESPBillboard")
+                    
+                    if Config.ESP.Type == "Highlight" then
+                        if oldBB then oldBB:Destroy() end
+                        if not oldHL then
+                            oldHL = Instance.new("Highlight", char)
+                            oldHL.Name = "ESPHighlight"
+                        end
+                        oldHL.FillColor = currentThemeColor
+                        oldHL.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    else
+                        if oldHL then oldHL:Destroy() end
+                        if not oldBB then
+                            oldBB = Instance.new("SelectionBox", char)
+                            oldBB.Name = "ESPBillboard"
+                            oldBB.Adornee = char
+                        end
+                        oldBB.Color3 = currentThemeColor
+                    end
+
+                    -- Name ESP Toggle
+                    local nameTag = char.HumanoidRootPart:FindFirstChild("ESPNameTag")
+                    if Config.ESP.ShowNames then
+                        if not nameTag then
+                            nameTag = Instance.new("BillboardGui", char.HumanoidRootPart)
+                            nameTag.Name = "ESPNameTag"
+                            nameTag.Size = UDim2.new(0, 100, 0, 30)
+                            nameTag.StudsOffset = Vector3.new(0, 3, 0)
+                            nameTag.AlwaysOnTop = true
+                            
+                            local txt = Instance.new("TextLabel", nameTag)
+                            txt.Size = UDim2.new(1, 0, 1, 0)
+                            txt.BackgroundTransparency = 1
+                            txt.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            txt.TextStrokeTransparency = 0
+                            txt.Font = Enum.Font.SourceSansBold
+                            txt.TextSize = 14
+                        end
+                        nameTag.TextLabel.Text = p.Name
+                        nameTag.TextLabel.TextColor3 = currentThemeColor
+                    else
+                        if nameTag then nameTag:Destroy() end
+                    end
+                end
+            end
+        else
+            -- Clean all ESP
+            for _, p in pairs(Players:GetPlayers()) do
+                if p.Character then
+                    if p.Character:FindFirstChild("ESPHighlight") then p.Character.ESPHighlight:Destroy() end
+                    if p.Character:FindFirstChild("ESPBillboard") then p.Character.ESPBillboard:Destroy() end
+                    if p.Character:FindFirstChild("HumanoidRootPart") and p.Character.HumanoidRootPart:FindFirstChild("ESPNameTag") then
+                        p.Character.HumanoidRootPart.ESPNameTag:Destroy()
+                    end
+                end
+            end
+        end
+    end
+end)
